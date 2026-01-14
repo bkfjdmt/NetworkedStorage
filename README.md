@@ -1,29 +1,25 @@
 # 网络存储开发相关总结
-```
-graph TD
-    subgraph "Initiator Side (K8s Worker Node)"
-        Pod[Pod / Application] -->|System Call| VFS
-        VFS -->|Block Layer| Bio
-        Bio -->|Multipath| DM[Device Mapper / Multipath]
-        DM -->|Driver| TCP_Driver[NVMe-TCP / iSCSI Driver]
-    end
 
-    TCP_Driver -->|Network Fabric (TCP/RDMA)| NIC[Network Interface Card]
+## 云厂商网络存储开发解决方案
+早期，前台标准网络协议接入+后台深度定制ceph
+现在，多平台接入开发+后台针对各类新硬件自研架构
 
-    subgraph "Target Side (Storage Cluster)"
-        NIC -->|Polling| SPDK_App[SPDK Target Application]
-        
-        subgraph "User Space (High Performance)"
-            SPDK_App -->|Protocol Parsing| Proto[iSCSI / NVMe-oF Layer]
-            Proto -->|Bdev Layer| Bdev[Bdev Abstraction]
-            Bdev -->|Zero-Copy| Driver[NVMe User Driver]
-        end
-        
-        subgraph "Kernel Space (Legacy/Hybrid)"
-            Kernel_LIO[LIO / TGT] -->|Context Switch| VFS_K
-            VFS_K -->|File System| OSD[Ceph OSD / Backend]
-        end
-    end
 
-    Driver -->|PCIe| SSD[NVMe SSD]
-```
+## 不同业务：块存储（iscsi/nvmf）vs 文件存储（）vs 对象存储（s3）
+各个本质上是协议解析器+ 高性能事件处理器。作为网络虚拟存储的入口将各个业务标准读写操作。需要做【管理面】链接管理，【io面】请求下发。
+
+## 不同平台：openstack（cinder） vs VMware（vaai） vs K8S（csi） vs KVM （vhost）
+
+
+
+## ISCSI VS NVMF
+通用性/中心化瓶颈 vs 特性硬件/全面并发
+
+## TGT VS SPDK
+| **特性**     | **TGT**                                            | **SPDK**                                     |
+| ------------ | -------------------------------------------------- | -------------------------------------------- |
+| **I/O 路径** | **用户态逻辑 + 内核态 I/O**                        | **全用户态 (Kernel Bypass)**                 |
+| **系统调用** | 依赖大量的 System Calls (`read`, `write`, `epoll`) | **无系统调用** (初始化除外)                  |
+| **硬件交互** | 通过内核驱动 (Kernel Driver) 间接访问              | 通过 PMD (Poll Mode Driver) **直接接管硬件** |
+| **驱动模式** | **中断驱动 (Interrupt Driven)**                    | **轮询驱动 (Polling)**                       |
+| **数据拷贝** | **多次拷贝** (网卡->内核->用户态->内核->磁盘)      | **零拷贝** (网卡 DMA -> 用户态 -> 磁盘 DMA)  |
